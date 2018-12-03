@@ -157,12 +157,28 @@ message Gateway {
   // REQUIRED: A list of server specifications.
   repeated Server servers = 1;
 
-  // REQUIRED: One or more labels that indicate a specific set of pods/VMs
-  // on which this gateway configuration should be applied.
-  // The scope of label search is platform dependent.
-  // On Kubernetes, for example, the scope includes pods running in
-  // all reachable namespaces.
+  // REQUIRED if gateway type is EDGE. One or more labels that indicate a
+  // specific set of pods/VMs on which this gateway configuration should be
+  // applied.  The scope of label search is platform dependent.  On
+  // Kubernetes, for example, the scope includes pods running in all
+  // reachable namespaces.
   map<string, string> selector = 2;
+
+  // The gateway type determines the behavior of the gateway
+  enum GatewayType {
+    // Set the type as Edge if the gateway will be used to receive traffic
+    // from outside the service mesh.
+    EDGE = 0;
+
+    // Set the type as Sidecar if this gateway configuration will be used
+    // to model the outbound dependencies of a sidecar in a given
+    // namespace.
+    SIDECAR = 1;
+  }
+
+  // Gateway type determines the workloads to which this gateway
+  // specification will be applied.
+  GatewayType type = 3;
 }
 
 // `Server` describes the properties of the proxy on a given load balancer
@@ -227,10 +243,16 @@ message Gateway {
 //       privateKey: /etc/certs/privatekey.pem
 // ```
 message Server {
-  // REQUIRED: The Port on which the proxy should listen for incoming
-  // connections
+  // REQUIRED if gateway type is EDGE. The port on which the proxy should
+  // listen for incoming connections. If port is omitted for a gateway of
+  // type SIDECAR, the gateway will apply on all outbound traffic out of
+  // the sidecar.
   Port port = 1;
 
+  // The IP address to bind this server to. Typically used when the gateway
+  // type is Sidecar, for configuring access to a specific set of IPs.
+  string ip = 4;
+    
   // REQUIRED. A list of hosts exposed by this gateway. At least one
   // host is required. While typically applicable to
   // HTTP services, it can also be used for TCP services using TLS with
@@ -238,15 +260,26 @@ message Server {
   // a domain name. For example `*.foo.com` matches `bar.foo.com`
   // and `*.com` matches `bar.foo.com`, `example.com`, and so on.
   //
-  // **Note**: A `VirtualService` that is bound to a gateway must have one
-  // or more hosts that match the hosts specified in a server. The match
-  // could be an exact match or a suffix match with the server's hosts. For
-  // example, if the server's hosts specifies "*.example.com",
-  // VirtualServices with hosts dev.example.com, prod.example.com will
-  // match. However, VirtualServices with hosts example.com or
-  // newexample.com will not match.
+  // When the gateway type is Sidecar, the hosts specified herein can be
+  // used to scope the list of outbound services that can be reached from a
+  // given sidecar, thereby reducing the amount of configuration that needs
+  // to be propagated to the sidecars selected by the gateway.  The host
+  // name is of the form: <serviceNamespace>/<wildcardServiceName>.  For
+  // example, "reviews/*" will select all services in the reviews
+  // namespace. "*/reviews.example.com" will select the
+  // "reviews.example.com" from the service registry irrespective of the
+  // namespace where it is present.
+  //
+  // **Note for Edge Gateways**: A `VirtualService` that is bound to a
+  // gateway (type EDGE) must have one or more hosts that match the hosts
+  // specified in a server. The match could be an exact match or a suffix
+  // match with the server's hosts. For example, if the server's hosts
+  // specifies "*.example.com", VirtualServices with hosts dev.example.com,
+  // prod.example.com will match. However, VirtualServices with hosts
+  // example.com or newexample.com will not match.
   repeated string hosts = 2;
 
+  // TLS level options for Edge gateways.
   message TLSOptions {
     // If set to true, the load balancer will send a 301 redirect for all
     // http connections, asking the clients to use HTTPS.
@@ -330,9 +363,9 @@ message Server {
     repeated string cipher_suites = 9;
   }
 
-  // Set of TLS related options that govern the server's behavior. Use
-  // these options to control if all http requests should be redirected to
-  // https, and the TLS modes to use.
+  // Applicable only to EDGE gateways. Set of TLS related options that
+  // govern the server's behavior. Use these options to control if all http
+  // requests should be redirected to https, and the TLS modes to use.
   TLSOptions tls = 3;
 }
 
@@ -349,4 +382,18 @@ message Port {
 
   // Label assigned to the port.
   string name = 3;
+}
+
+// ConfigScope defines the visibility of an Istio configuration artifact in
+// a namespace when the namespace is imported.  By default all
+// configuration artifacts are public. Configurations with private scope
+// will not be imported when the namespace containing the configuration is
+// imported in a ServiceDependency.
+enum ConfigScope {
+  // Config with this scope are visible to all workloads in the mesh
+  PUBLIC = 0;
+
+  // Configs with this scope are visible to only workloads in the same
+  // namespace as the configuration resource.
+  PRIVATE = 1;
 }

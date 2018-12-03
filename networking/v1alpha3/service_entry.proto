@@ -15,7 +15,6 @@
 syntax = "proto3";
 
 import "networking/v1alpha3/gateway.proto";
-import "networking/v1alpha3/service_dependency.proto";
 
 package istio.networking.v1alpha3;
 
