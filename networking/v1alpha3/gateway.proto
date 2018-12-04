@@ -166,14 +166,18 @@ message Gateway {
 
   // The gateway type determines the behavior of the gateway
   enum GatewayType {
-    // Set the type as Edge if the gateway will be used to receive traffic
+    // Set the type as EDGE if the gateway will be used to receive traffic
     // from outside the service mesh.
     EDGE = 0;
 
-    // Set the type as Sidecar if this gateway configuration will be used
+    // Set the type as SIDECAR if this gateway configuration will be used
     // to model the outbound dependencies of a sidecar in a given
     // namespace.
     SIDECAR = 1;
+
+    // Set the type as MIDDLE if this gateway configuration will be used
+    // to configure a standalone proxy workload inside the mesh.
+    MIDDLE = 2;
   }
 
   // Gateway type determines the workloads to which this gateway
@@ -249,9 +253,16 @@ message Server {
   // the sidecar.
   Port port = 1;
 
-  // The IP address to bind this server to. Typically used when the gateway
-  // type is Sidecar, for configuring access to a specific set of IPs.
-  string ip = 4;
+  // The traffic flows or a specific IP address to bind this server
+  // to. Applicable only when the gateway type is Sidecar. Valid values are
+  // "ingress|egress|<ipAddress>". "ingress" implies the ports specified by
+  // the server will be opened by the sidecar for receiving external
+  // traffic to the workload. Ports must be specified when bind is set to
+  // "ingress". "egress" implies the hosts (and ports) specified in the
+  // server will be reachable from the sidecar in the outbound path from
+  // the workload to the destination service. Specify an IP address if the
+  // server should be bound to a specific IP.
+  string bind = 4;
     
   // REQUIRED. A list of hosts exposed by this gateway. At least one
   // host is required. While typically applicable to
